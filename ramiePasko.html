@@ -1,0 +1,232 @@
+<html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Todo API Tester</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 900px;
+      margin: auto;
+      padding: 20px;
+    }
+
+    h2 {
+      margin-top: 30px;
+    }
+
+    input, button {
+      padding: 6px;
+      margin: 4px;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    li {
+      padding: 6px;
+      border-bottom: 1px solid #ccc;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    li.done {
+      text-decoration: line-through;
+      color: gray;
+    }
+
+    .error {
+      color: red;
+      white-space: pre-wrap;
+    }
+
+    .details {
+      background: #f4f4f4;
+      padding: 10px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Todo API Tester</h1>
+
+<label>
+  Base API URL:
+  <input id="baseUrl" value="https://localhost:7049" size="40">
+</label>
+<button onclick="loadTodos()">Load</button>
+
+<h2>Add Todo</h2>
+<input id="newTitle" placeholder="New resolution title">
+<button onclick="addTodo()">Add</button>
+
+<h2>Filters</h2>
+<label>
+  Title contains:
+  <input id="filterTitle">
+</label>
+
+<label>
+  Is Done:
+  <select id="filterDone">
+    <option value="">All</option>
+    <option value="true">Done</option>
+    <option value="false">Not Done</option>
+  </select>
+</label>
+
+<button onclick="loadTodos()">Apply Filters</button>
+
+<h2>Todos</h2>
+<ul id="list"></ul>
+
+<h2>Details</h2>
+<div id="details" class="details"></div>
+
+<div id="error" class="error"></div>
+
+<script>
+async function request(url, options = {}) {
+  const res = await fetch(url, {
+    headers: { "Content-Type": "application/json" },
+    ...options
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw JSON.stringify(err, null, 2);
+  }
+
+  return res.status === 204 ? null : res.json();
+}
+
+function api(path) {
+  return document.getElementById("baseUrl").value + path;
+}
+
+async function loadTodos() {
+  try {
+    document.getElementById("error").textContent = "";
+
+    const title = document.getElementById("filterTitle").value;
+    const isDone = document.getElementById("filterDone").value;
+
+    const params = new URLSearchParams();
+    if (title) params.append("title", title);
+    if (isDone !== "") params.append("isDone", isDone);
+
+    const data = await request(api("/api/resolutions?" + params.toString()));
+
+    const list = document.getElementById("list");
+    list.innerHTML = "";
+
+    data.items.forEach(item => {
+      const li = document.createElement("li");
+      li.className = item.isDone ? "done" : "";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = item.isDone;
+      checkbox.onclick = () => toggleDone(item);
+
+      const title = document.createElement("span");
+      title.textContent = item.title;
+      title.style.cursor = "pointer";
+      title.onclick = () => loadDetails(item.id);
+
+      const edit = document.createElement("button");
+      edit.textContent = "Edit";
+      edit.onclick = () => editTitle(item);
+
+      const del = document.createElement("button");
+      del.textContent = "Delete";
+      del.onclick = () => deleteTodo(item.id);
+
+      li.append(checkbox, title, edit, del);
+      list.appendChild(li);
+    });
+  } catch (e) {
+    document.getElementById("error").textContent = e;
+  }
+}
+
+async function loadDetails(id) {
+  try {
+    const data = await request(api(`/api/resolutions/${id}`));
+    document.getElementById("details").textContent =
+      JSON.stringify(data, null, 2);
+  } catch (e) {
+    document.getElementById("error").textContent = e;
+  }
+}
+
+async function addTodo() {
+  try {
+    const title = document.getElementById("newTitle").value;
+    await request(api("/api/resolutions"), {
+      method: "POST",
+      body: JSON.stringify({ title })
+    });
+    document.getElementById("newTitle").value = "";
+    loadTodos();
+  } catch (e) {
+    document.getElementById("error").textContent = e;
+  }
+}
+
+async function toggleDone(item) {
+  try {
+    await request(api(`/api/resolutions/${item.id}`), {
+      method: "PUT",
+      body: JSON.stringify({
+        id: item.id,
+        title: item.title,
+        isDone: !item.isDone
+      })
+    });
+    loadTodos();
+  } catch (e) {
+    document.getElementById("error").textContent = e;
+  }
+}
+
+async function editTitle(item) {
+  const newTitle = prompt("New title:", item.title);
+  if (!newTitle) return;
+
+  try {
+    await request(api(`/api/resolutions/${item.id}`), {
+      method: "PUT",
+      body: JSON.stringify({
+        id: item.id,
+        title: newTitle,
+        isDone: item.isDone
+      })
+    });
+    loadTodos();
+  } catch (e) {
+    document.getElementById("error").textContent = e;
+  }
+}
+
+async function deleteTodo(id) {
+  if (!confirm("Delete this item?")) return;
+
+  try {
+    await request(api(`/api/resolutions/${id}`), {
+      method: "DELETE"
+    });
+    loadTodos();
+    document.getElementById("details").textContent = "";
+  } catch (e) {
+    document.getElementById("error").textContent = e;
+  }
+}
+</script>
+
+</body>
+</html>
